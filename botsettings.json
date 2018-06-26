@@ -1,0 +1,8 @@
+{
+    "discord" : {
+        "client_token" : "token",
+        "description" : "username",
+        "command_prefix" : "prefix",
+        "game" : "game"
+    }
+}
