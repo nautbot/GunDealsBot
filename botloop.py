@@ -167,7 +167,7 @@ async def subscribe(ctx):
         string = "{} has successfully subscribed to {}"
         await bot.say(string.format(ctx.message.author, command[1]))
 
-    # TODO - Write 1 new record to db with fields [userid, subscription string]
+    # TODO - Write 1 new record to db with fields [userid, subscription string] if it doesn't exist
 
 @bot.command(pass_context=True, name="unsub")
 async def unsubscribe(ctx):
@@ -180,7 +180,7 @@ async def unsubscribe(ctx):
         string = "{} has successfully unsubscribed from {}"
         await bot.say(string.format(ctx.message.author, command[1]))
 
-    # TODO - Remove 1 record from db matching [userid, subscription string]
+    # TODO - Remove 1 record from db matching [userid, subscription string] if it exists
 
 @bot.command(pass_context=True, name="unsuball")
 async def unsubscribeAll(ctx):
@@ -190,6 +190,15 @@ async def unsubscribeAll(ctx):
     string = "{} has successfully dropped all subscriptions"
     await bot.say(string.format(ctx.message.author))
 
-    # TODO - Remove [0, many] records from db matching [userid]
-    
+    # TODO - Remove [0, many] records from db matching [userid] if any exist
+
+@bot.command(pass_context=True, name="showsub")
+async def showSubscription(ctx):
+    print(dir(ctx))
+    command = ctx.message.content.split()
+   
+    string = "Gundeals subscriptions for {}: ..."
+    await bot.say(string.format(ctx.message.author))
+
+    # TODO - Retrieve [0, many] records from db matching [userid] if any exist
 bot.run(settings["discord"]["client_token"])
