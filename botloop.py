@@ -156,5 +156,17 @@ async def on_ready():
         pass
     await asyncio.sleep(1)
 
+@bot.command(pass_context=True, name="sub")
+async def subscribe(ctx):
+    print(dir(ctx))
+    command = ctx.message.content.split(" ")
+    
+    if len(command) < 2:
+        await bot.say("Invalid command. Display help or do nada")
+    else:
+        string = "{} has successfully subbed to {}"
+        await bot.say(string.format(ctx.message.author, command[1]))
+
+    # Write new record to db
 
 bot.run(settings["discord"]["client_token"])

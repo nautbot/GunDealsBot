@@ -1,8 +1,8 @@
 {
     "discord" : {
-        "client_token" : "",
+        "client_token" : "NDYwOTg2MDUwNTIxNTk1OTM1.DhNAAg._bAl-JsLTxJzE6C8jJomTwup3_A",
         "description" : "username",
-        "command_prefix" : "prefix",
+        "command_prefix" : "!",
         "game" : "game"
     }
 }
