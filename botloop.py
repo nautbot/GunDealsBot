@@ -164,9 +164,22 @@ async def subscribe(ctx):
     if len(command) < 2:
         await bot.say("Invalid command. Display help or do nada")
     else:
-        string = "{} has successfully subbed to {}"
+        string = "{} has successfully subscribed to {}"
         await bot.say(string.format(ctx.message.author, command[1]))
 
     # Write new record to db
+
+@bot.command(pass_context=True, name="unsub")
+async def unsubscribe(ctx):
+    print(dir(ctx))
+    command = ctx.message.content.split(" ")
+    
+    if len(command) < 2:
+        await bot.say("Invalid command. Display help or do nada")
+    else:
+        string = "{} has successfully unsubscribed from {}"
+        await bot.say(string.format(ctx.message.author, command[1]))
+
+    # Remove record from db [userid, subscription string]
 
 bot.run(settings["discord"]["client_token"])
