@@ -159,7 +159,7 @@ async def on_ready():
 @bot.command(pass_context=True, name="sub")
 async def subscribe(ctx):
     print(dir(ctx))
-    command = ctx.message.content.split(" ")
+    command = ctx.message.content.split()
     
     if len(command) < 2:
         await bot.say("Invalid command. Display help or do nada")
@@ -167,12 +167,12 @@ async def subscribe(ctx):
         string = "{} has successfully subscribed to {}"
         await bot.say(string.format(ctx.message.author, command[1]))
 
-    # Write new record to db
+    # TODO - Write 1 new record to db with fields [userid, subscription string]
 
 @bot.command(pass_context=True, name="unsub")
 async def unsubscribe(ctx):
     print(dir(ctx))
-    command = ctx.message.content.split(" ")
+    command = ctx.message.content.split()
     
     if len(command) < 2:
         await bot.say("Invalid command. Display help or do nada")
@@ -180,6 +180,16 @@ async def unsubscribe(ctx):
         string = "{} has successfully unsubscribed from {}"
         await bot.say(string.format(ctx.message.author, command[1]))
 
-    # Remove record from db [userid, subscription string]
+    # TODO - Remove 1 record from db matching [userid, subscription string]
 
+@bot.command(pass_context=True, name="unsuball")
+async def unsubscribeAll(ctx):
+    print(dir(ctx))
+    command = ctx.message.content.split()
+   
+    string = "{} has successfully dropped all subscriptions"
+    await bot.say(string.format(ctx.message.author))
+
+    # TODO - Remove [0, many] records from db matching [userid]
+    
 bot.run(settings["discord"]["client_token"])
