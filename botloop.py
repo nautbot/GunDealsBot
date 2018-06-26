@@ -9,11 +9,37 @@ import json
 
 import discord
 from discord.ext import commands
+import requests
 import sqlite3
 
 
 with open('botsettings.json') as settings_file:
     settings = json.load(settings_file)
+
+
+sql = sqlite3.connect('sql.db')
+print('Loaded SQLite Database')
+cur = sql.cursor()
+
+## Create processedSubmissions table
+sql.execute('CREATE TABLE IF NOT EXISTS ' \
+    'processedSubmissions(' \
+    'submissionID TEXT NOT NULL PRIMARY KEY, ' \
+    'createdUTC INTEGER NOT NULL)')
+
+## Create feeds table
+sql.execute('CREATE TABLE IF NOT EXISTS ' \
+    'feeds(' \
+    'channelID TEXT NOT NULL PRIMARY KEY)')
+
+## Create subscriptions table
+sql.execute('CREATE TABLE IF NOT EXISTS ' \
+    'subscriptions(' \
+    'userID TEXT NOT NULL, ' \
+    'matchPattern TEXT NOT NULL, ' \
+    'PRIMARY KEY(userID, matchPattern))')
+
+sql.commit()
 
 
 # Application info
@@ -22,6 +48,7 @@ version = '0.0.0'
 print('{} - {}'.format(username, version))
 start_time = datetime.datetime.utcnow()
 default_embed_color = 0x669999
+processedSubmissions = []
 
 
 bot = commands.Bot(
@@ -51,9 +78,16 @@ async def bot_restart(ctx):
         pass
         sys.exit(0)
 
+
 @bot.command(pass_context=True, name="ping")
 async def bot_ping(ctx):
-    await ctx.send('Pong! {0}'.format(round(bot.latency, 1)))
+    pong_message = await bot.say("Pong!")
+    await asyncio.sleep(0.5)
+    delta = pong_message.timestamp - ctx.message.timestamp
+    millis = delta.days * 24 * 60 * 60 * 1000
+    millis += delta.seconds * 1000
+    millis += delta.microseconds / 1000
+    await bot.edit_message(pong_message, "Pong! `{}ms`".format(int(millis)))
 
 
 def get_bot_uptime(*, brief=False):
@@ -156,6 +190,11 @@ async def on_ready():
         pass
     await asyncio.sleep(1)
 
+
+###################################
+##### Subscription Management #####
+###################################
+
 @bot.command(pass_context=True, name="sub")
 async def subscribe(ctx):
     print(dir(ctx))
@@ -168,6 +207,7 @@ async def subscribe(ctx):
         await bot.say(string.format(ctx.message.author, command[1]))
 
     # TODO - Write 1 new record to db with fields [userid, subscription string] if it doesn't exist
+
 
 @bot.command(pass_context=True, name="unsub")
 async def unsubscribe(ctx):
@@ -182,6 +222,7 @@ async def unsubscribe(ctx):
 
     # TODO - Remove 1 record from db matching [userid, subscription string] if it exists
 
+
 @bot.command(pass_context=True, name="unsuball")
 async def unsubscribeAll(ctx):
     print(dir(ctx))
@@ -192,6 +233,7 @@ async def unsubscribeAll(ctx):
 
     # TODO - Remove [0, many] records from db matching [userid] if any exist
 
+
 @bot.command(pass_context=True, name="showsub")
 async def showSubscription(ctx):
     print(dir(ctx))
@@ -201,4 +243,67 @@ async def showSubscription(ctx):
     await bot.say(string.format(ctx.message.author))
 
     # TODO - Retrieve [0, many] records from db matching [userid] if any exist
+
+
+
+#######################################
+##### Feed Processing/ Management #####
+#######################################
+
+# TODO - Create manager commands for adding/removing feed from channel
+
+async def backgroundLoop():
+    await bot.wait_until_ready()
+    while bot.is_logged_in and not bot.is_closed:
+        r = requests.get(
+            settings['feed']['json_url'],
+            headers = {'User-agent': 'GunDealsBot 0.0.0'})
+        sub_new = r.json()
+        for item in sub_new['data']['children']:
+            submissionID = str(item['data']['name'])
+            submissionTitle = str(item['data']['title'])
+            submissionURL = str(item['data']['url'])
+            submissionCreatedUTC = int(item['data']['created_utc'])
+            cur.execute('SELECT submissionID FROM ' \
+                        'processedSubmissions WHERE submissionID=?',
+                        (submissionID,))
+            if not cur.fetchone():
+                pushToFeeds(submissionTitle,
+                            submissionURL)
+                pushToSubscriptions(submissionTitle,
+                                    submissionURL)
+                cur.execute('INSERT INTO processedSubmissions VALUES(?,?)',
+                            (submissionID, submissionCreatedUTC))
+                sql.commit()
+            print(item['data']['name'])
+        cur.execute('DELETE FROM processedSubmissions ' \
+                    'WHERE submissionID NOT IN ' \
+                    '(SELECT submissionID FROM ' \
+                    'processedSubmissions ORDER BY createdUTC DESC LIMIT 50)')
+        sql.commit()
+        cur.execute('VACUUM')
+        await asyncio.sleep(60)
+
+
+async def pushToFeeds(title, url):
+    cur.execute('SELECT channelID from feeds')
+    for row in cur:
+        channelID = int(row[0])
+        try:
+            await bot.send_message(
+                        channelID,
+                        '**{}**\n{}\n-'.format(title, url)
+                    )
+        except Exception as e:
+            print('pushToFeeds : ', e)
+            pass
+
+
+def pushToSubscriptions(title, url):
+    cur.execute('SELECT userID, matchPattern FROM subscriptions')
+
+    # TODO - Get all user subscriptions, search for pattern matches and send DM notifications
+
+
+bot.loop.create_task(backgroundLoop())
 bot.run(settings["discord"]["client_token"])
