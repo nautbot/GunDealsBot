@@ -12,10 +12,14 @@ from discord.ext import commands
 import requests
 import sqlite3
 
+import checks
+
 
 with open('botsettings.json') as settings_file:
     settings = json.load(settings_file)
 
+
+# TODO - Is WAL pragma needed to avoid DB contention between commands and background loop?
 
 sql = sqlite3.connect('sql.db')
 print('Loaded SQLite Database')
@@ -57,11 +61,7 @@ bot = commands.Bot(
 )
 
 
-@bot.command(pass_context=True, name="test")
-async def serve(ctx):
-    await bot.say('test')
-
-
+@checks.admin_or_permissions(manage_server=True)
 @bot.command(pass_context=True, name="restart")
 async def bot_restart(ctx):
     try:
@@ -79,6 +79,7 @@ async def bot_restart(ctx):
         sys.exit(0)
 
 
+@checks.admin_or_permissions(manage_server=True)
 @bot.command(pass_context=True, name="ping")
 async def bot_ping(ctx):
     pong_message = await bot.say("Pong!")
@@ -108,6 +109,7 @@ def get_bot_uptime(*, brief=False):
     return fmt.format(d=days, h=hours, m=minutes, s=seconds)
 
 
+@checks.admin_or_permissions(manage_server=True)
 @bot.command(pass_context=True, name="status")
 async def bot_status(ctx):
     passed = get_bot_uptime()
@@ -246,63 +248,121 @@ async def showSubscription(ctx):
 
 
 
-#######################################
-##### Feed Processing/ Management #####
-#######################################
+######################################
+##### Feed Processing/Management #####
+######################################
 
-# TODO - Create manager commands for adding/removing feed from channel
+@checks.admin_or_permissions(manage_server=True)
+@bot.command(pass_context=True, name="addfeed")
+async def addFeed(ctx):
+    channelID = int(ctx.message.channel.id)
+    channelName = ctx.message.channel.name
+    cur.execute('SELECT channelID FROM feeds WHERE channelID=?',
+                (channelID,))
+    if cur.fetchone():
+       await bot.say('Feed already exists for channel {}' \
+                    .format(channelName))
+    else:
+        cur.execute('INSERT INTO feeds VALUES(?)', 
+                    (channelID,))
+        sql.commit()
+        await bot.say('Added feed to channel {}' \
+                    .format(channelName))
+
+
+@checks.admin_or_permissions(manage_server=True)
+@bot.command(pass_context=True, name="removefeed")
+async def removeFeed(ctx):
+    channelID = int(ctx.message.channel.id)
+    channelName = ctx.message.channel.name
+    cur.execute('SELECT channelID FROM feeds WHERE channelID=?',
+                (channelID,))
+    if cur.fetchone():
+        cur.execute('DELETE FROM feeds WHERE channelID=?',
+                    (channelID,))
+        await bot.say('Removed feed from channel {}' \
+                    .format(channelName))
+    else:
+        await bot.say('No feeds found for channel {}' \
+                    .format(channelName))
+
 
 async def backgroundLoop():
     await bot.wait_until_ready()
     while bot.is_logged_in and not bot.is_closed:
+        newSubmissionsFound = False
         r = requests.get(
             settings['feed']['json_url'],
-            headers = {'User-agent': 'GunDealsBot 0.0.0'})
-        sub_new = r.json()
-        for item in sub_new['data']['children']:
+            headers = {'User-agent': '{} - {}'.format(username, version)})
+        subNew = r.json()
+        for item in subNew['data']['children']:
             submissionID = str(item['data']['name'])
             submissionTitle = str(item['data']['title'])
-            submissionURL = str(item['data']['url'])
+            submissionURL = 'https://www.reddit.com' + \
+                            str(item['data']['permalink'])
             submissionCreatedUTC = int(item['data']['created_utc'])
             cur.execute('SELECT submissionID FROM ' \
                         'processedSubmissions WHERE submissionID=?',
                         (submissionID,))
             if not cur.fetchone():
-                pushToFeeds(submissionTitle,
-                            submissionURL)
-                pushToSubscriptions(submissionTitle,
-                                    submissionURL)
+                newSubmissionsFound = True
+                await pushToFeeds(submissionTitle, submissionURL)
+                await pushToSubscriptions(submissionTitle, submissionURL)
                 cur.execute('INSERT INTO processedSubmissions VALUES(?,?)',
                             (submissionID, submissionCreatedUTC))
                 sql.commit()
-            print(item['data']['name'])
-        cur.execute('DELETE FROM processedSubmissions ' \
-                    'WHERE submissionID NOT IN ' \
-                    '(SELECT submissionID FROM ' \
-                    'processedSubmissions ORDER BY createdUTC DESC LIMIT 50)')
-        sql.commit()
-        cur.execute('VACUUM')
+        if newSubmissionsFound == True:
+            cur.execute('DELETE FROM processedSubmissions ' \
+                        'WHERE submissionID NOT IN ' \
+                        '(SELECT submissionID FROM ' \
+                        'processedSubmissions ' \
+                        'ORDER BY createdUTC DESC LIMIT 50)')
+            sql.commit()
+            cur.execute('VACUUM')
+            newSubmissionsFound = False
         await asyncio.sleep(60)
 
 
 async def pushToFeeds(title, url):
     cur.execute('SELECT channelID from feeds')
     for row in cur:
-        channelID = int(row[0])
+        channelID = str(row[0])
         try:
+            channel = bot.get_channel(id=channelID)
             await bot.send_message(
-                        channelID,
-                        '**{}**\n{}\n-'.format(title, url)
+                        channel,
+                        '**{}**\n<{}>\n-'.format(title, url)
                     )
+        except discord.errors.NotFound as de:
+            print('pushToFeeds : discord.errors.NotFound (Server/Channel) : ', de)
+            pass
+            # TODO - Delete feed if channel cannot be found?
         except Exception as e:
             print('pushToFeeds : ', e)
             pass
+    await asyncio.sleep(0.1)
 
 
-def pushToSubscriptions(title, url):
+async def pushToSubscriptions(title, url):
     cur.execute('SELECT userID, matchPattern FROM subscriptions')
-
-    # TODO - Get all user subscriptions, search for pattern matches and send DM notifications
+    for row in cur:
+        userID = str(row[0])
+        matchPattern = str(row[1]).lower().split(' ')
+        if all([word in title.lower() for word in matchPattern]):
+            try:
+                user = bot.get_user_info(userID)
+                await bot.send_message(
+                            user,
+                            '**{}**\n<{}>\n-'.format(title, url)
+                        )
+            except discord.errors.NotFound as de:
+                print('pushToSubscriptions : discord.errors.NotFound (User) : ', de)
+                pass
+                # TODO - Delete user subscriptions if user cannot be found?
+            except Exception as e:
+                print('pushToSubscriptions : ', e)
+                pass
+    await asyncio.sleep(0.1)
 
 
 bot.loop.create_task(backgroundLoop())
