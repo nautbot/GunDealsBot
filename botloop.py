@@ -198,22 +198,32 @@ def prettifySubs(username, rows):
         string +=  str(row[0]) + ' ' + row[2] + '\n'
     return string
 
-def embedError(message):
-    return discord.Embed(
-        title='❌ {}'.format(message),
-        color=0xDD2E44)
+def embedError(title, description=''):
+    em = discord.Embed(
+        title='❌ {}'.format(title),
+        description='%s' % description,
+        color=0xDD2E44
+    )
+    em.set_footer(text="This is an error message.")
+    return em
 
-def embedSuccess(message):
-    return discord.Embed(
-        title='✅ {}'.format(message),
+def embedSuccess(title, description=''):
+    em = discord.Embed(
+        title='✅ {}'.format(title),
+        description='%s' % description,
         color=0x77B255
     )
+    em.set_footer(text="This is a success message.")
+    return em
 
-def embedInformation(message):
-    return discord.Embed(
-        title='ℹ️ {}'.format(message),
-        color=0x0079D8
-    )
+def embedInformation(title, description=''):
+    em = discord.Embed(
+        title='ℹ️ {}'.format(title),
+        description='%s' % description,
+        color=0x0079D8,
+        )
+    em.set_footer(text="This is an informational message.")
+    return em
 
 ###################################
 ##### Subscription Management #####
