@@ -199,37 +199,50 @@ async def on_ready():
 
 @bot.command(pass_context=True, name="sub")
 async def subscribe(ctx):
-    print(dir(ctx))
     command = ctx.message.content.split()
-    
+
+    # A valid sub command must be followed by a pattern like: !sub item
     if len(command) < 2:
         await bot.say("Invalid command. Display help or do nada")
     else:
-        string = "{} has successfully subscribed to {}"
-        await bot.say(string.format(ctx.message.author, command[1]))
-
-    # TODO - Write 1 new record to db with fields [userid, subscription string] if it doesn't exist
-
+        cur.execute('SELECT * FROM subscriptions WHERE userID=? and matchPattern=?',
+                    (str(ctx.message.author.id), command[1]))
+        if cur.fetchone():
+            string = "User {} already has subscription to '{}'"
+            await bot.say(string.format(ctx.message.author.name, command[1]))
+        else:
+            cur.execute('INSERT INTO subscriptions VALUES(?,?)',
+                        (str(ctx.message.author.id), command[1]))
+            sql.commit()
+            string = "User {} successfully subscribed to '{}'"
+            await bot.say(string.format(ctx.message.author.name, command[1]))
 
 @bot.command(pass_context=True, name="unsub")
 async def unsubscribe(ctx):
-    print(dir(ctx))
     command = ctx.message.content.split()
-    
+
     if len(command) < 2:
         await bot.say("Invalid command. Display help or do nada")
     else:
-        string = "{} has successfully unsubscribed from {}"
-        await bot.say(string.format(ctx.message.author, command[1]))
+        cur.execute('SELECT * FROM subscriptions WHERE userID=? and matchPattern=?',
+                    (str(ctx.message.author.id), command[1]))
+        if cur.fetchone():
+            cur.execute('DELETE FROM subscriptions WHERE userID=? and matchPattern=?',
+                        (str(ctx.message.author.id), command[1]))
+            sql.commit()
 
-    # TODO - Remove 1 record from db matching [userid, subscription string] if it exists
+            string = "{} has successfully unsubscribed from {}"
+            await bot.say(string.format(ctx.message.author.name, command[1]))
 
+        else:
+            string = "User {} doesn't have subscription to '{}'"
+            await bot.say(string.format(ctx.message.author, command[1]))
 
 @bot.command(pass_context=True, name="unsuball")
 async def unsubscribeAll(ctx):
     print(dir(ctx))
     command = ctx.message.content.split()
-   
+
     string = "{} has successfully dropped all subscriptions"
     await bot.say(string.format(ctx.message.author))
 
@@ -240,7 +253,7 @@ async def unsubscribeAll(ctx):
 async def showSubscription(ctx):
     print(dir(ctx))
     command = ctx.message.content.split()
-   
+
     string = "Gundeals subscriptions for {}: ..."
     await bot.say(string.format(ctx.message.author))
 
@@ -263,7 +276,7 @@ async def addFeed(ctx):
        await bot.say('Feed already exists for channel {}' \
                     .format(channelName))
     else:
-        cur.execute('INSERT INTO feeds VALUES(?)', 
+        cur.execute('INSERT INTO feeds VALUES(?)',
                     (channelID,))
         sql.commit()
         await bot.say('Added feed to channel {}' \
