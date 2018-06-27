@@ -198,6 +198,23 @@ def prettifySubs(username, rows):
         string +=  str(row[0]) + ' ' + row[2] + '\n'
     return string
 
+def embedError(message):
+    return discord.Embed(
+        title='❌ {}'.format(message),
+        color=0xDD2E44)
+
+def embedSuccess(message):
+    return discord.Embed(
+        title='✅ {}'.format(message),
+        color=0x77B255
+    )
+
+def embedInformation(message):
+    return discord.Embed(
+        title='ℹ️ {}'.format(message),
+        color=0x0079D8
+    )
+
 ###################################
 ##### Subscription Management #####
 ###################################
@@ -213,14 +230,19 @@ async def subscribe(ctx):
         cur.execute('SELECT * FROM subscriptions WHERE userID=? and matchPattern=?',
                     (str(ctx.message.author.id), command[1]))
         if cur.fetchone():
-            string = "User {} already has subscription to '{}'"
-            await bot.say(string.format(ctx.message.author.name, command[1]))
+            string = "User {} already has subscription to '{}'" \
+                .format(ctx.message.author.name, command[1])
+            embed = embedInformation(string)
+            await bot.say(embed=embed)
         else:
             cur.execute('INSERT INTO subscriptions(userID, matchPattern) VALUES(?,?)',
                         (str(ctx.message.author.id), command[1]))
             sql.commit()
-            string = "User {} successfully subscribed to '{}'"
-            await bot.say(string.format(ctx.message.author.name, command[1]))
+            string = "User {} successfully subscribed to '{}'" \
+                .format(ctx.message.author.name, command[1])
+
+            embed = embedSuccess(string)
+            await bot.say(embed=embed)
 
 @bot.command(pass_context=True, name="unsub")
 async def unsubscribe(ctx):
@@ -290,23 +312,19 @@ async def addFeed(ctx):
     cur.execute('SELECT channelID FROM feeds WHERE channelID=?',
                 (channelID,))
     if cur.fetchone():
-        embed=discord.Embed(
-            title='❌ Feed already exists for channel **{}**' \
-                  .format(channelName),
-            color=0xDD2E44
-        )
+        string = 'Feed already exists for channel **{}**' \
+            .format(channelName)
+        embed = embedInformation(string)
         await bot.say(embed=embed)
     else:
         cur.execute('INSERT INTO feeds VALUES(?)',
                     (channelID,))
         sql.commit()
-        embed=discord.Embed(
-            title='✅ Added feed to channel **{}**' \
-                  .format(channelName),
-            color=0x77B255
-        )
-        await bot.say(embed=embed)
 
+        string = 'Added feed to channel **{}**' \
+              .format(channelName),
+        embed = embedSuccess(string)
+        await bot.say(embed=embed)
 
 @checks.admin_or_permissions(manage_server=True)
 @bot.command(pass_context=True, name="removefeed")
