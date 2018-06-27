@@ -39,9 +39,9 @@ sql.execute('CREATE TABLE IF NOT EXISTS ' \
 ## Create subscriptions table
 sql.execute('CREATE TABLE IF NOT EXISTS ' \
     'subscriptions(' \
+    'id INTEGER PRIMARY KEY, ' \
     'userID TEXT NOT NULL, ' \
-    'matchPattern TEXT NOT NULL, ' \
-    'PRIMARY KEY(userID, matchPattern))')
+    'matchPattern TEXT NOT NULL)')
 
 sql.commit()
 
@@ -195,7 +195,7 @@ async def on_ready():
 def prettifySubs(username, rows):
     string = 'Subscriptions for user %s\n\n' % username
     for row in rows:
-        string +=  row[0] + ' ' + row[1] + '\n'
+        string +=  str(row[0]) + ' ' + row[2] + '\n'
     return string
 
 ###################################
@@ -216,7 +216,7 @@ async def subscribe(ctx):
             string = "User {} already has subscription to '{}'"
             await bot.say(string.format(ctx.message.author.name, command[1]))
         else:
-            cur.execute('INSERT INTO subscriptions VALUES(?,?)',
+            cur.execute('INSERT INTO subscriptions(userID, matchPattern) VALUES(?,?)',
                         (str(ctx.message.author.id), command[1]))
             sql.commit()
             string = "User {} successfully subscribed to '{}'"
@@ -258,7 +258,6 @@ async def unsubscribeAll(ctx):
 
 @bot.command(pass_context=True, name="showsub")
 async def showSubscription(ctx):
-    print(dir(ctx))
     command = ctx.message.content.split()
 
     if len(command) != 1:
