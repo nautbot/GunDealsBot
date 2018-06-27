@@ -245,16 +245,24 @@ async def unsubscribe(ctx):
 
 @bot.command(pass_context=True, name="unsuball")
 async def unsubscribeAll(ctx):
-    print(dir(ctx))
     command = ctx.message.content.split()
 
-    string = "{} has successfully dropped all subscriptions"
-    await bot.say(string.format(ctx.message.author))
-
-    if len(command) < 2:
+    if len(command) != 1:
         await bot.say("Invalid command. Display help or do nada")
     else:
-        return
+        cur.execute('SELECT * FROM subscriptions WHERE userID=?',
+                    (str(ctx.message.author.id),))
+        if cur.fetchone():
+            cur.execute('DELETE FROM subscriptions WHERE userID=?',
+                        (str(ctx.message.author.id),))
+            sql.commit()
+
+            string = "{} has successfully dropped all subscriptions"
+            await bot.say(string.format(ctx.message.author.name))
+
+        else:
+            string = "User {} doesn't have any subscriptions"
+            await bot.say(string.format(ctx.message.author))
 
 @bot.command(pass_context=True, name="showsub")
 async def showSubscription(ctx):
