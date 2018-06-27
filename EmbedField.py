@@ -4,10 +4,10 @@ This class represents a single field that can be added to type Discord.Embed
 
 
 class EmbedField:
-    def __init__(self):
-		self._name = ''
-		self._value = ''
-		self.inline = False
+    def __init__(self, value, name="", inline=True):
+		self._name = name
+		self._value = value
+		self.inline = inline
 
 	@property
 	def name(self):
