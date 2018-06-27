@@ -258,12 +258,16 @@ async def unsubscribe(ctx):
                         (command[1], str(ctx.message.author.id)))
             sql.commit()
 
-            string = "{} has successfully unsubscribed from {}"
-            await bot.say(string.format(ctx.message.author.name, command[1]))
+            string = "{} has successfully unsubscribed from {}" \
+                .format(ctx.message.author.name, command[1])
+            embed = embedSuccess(string)
+            await bot.say(embed=embed)
 
         else:
-            string = "User {} doesn't have subscription to '{}'"
-            await bot.say(string.format(ctx.message.author, command[1]))
+            string = "User {} doesn't have subscription to '{}'" \
+                .format(ctx.message.author, command[1])
+            embed = embedInformation(string)
+            await bot.say(embed=embed)
 
 @bot.command(pass_context=True, name="unsuball")
 async def unsubscribeAll(ctx):
@@ -279,12 +283,16 @@ async def unsubscribeAll(ctx):
                         (str(ctx.message.author.id),))
             sql.commit()
 
-            string = "{} has successfully dropped all subscriptions"
-            await bot.say(string.format(ctx.message.author.name))
+            string = "{} has successfully dropped all subscriptions" \
+                .format(ctx.message.author.name)
+            embed = embedSuccess(string)
+            await bot.say(embed=embed)
 
         else:
-            string = "User {} doesn't have any subscriptions"
-            await bot.say(string.format(ctx.message.author))
+            string = "User {} doesn't have any subscriptions" \
+                .format(ctx.message.author)
+            embed = embedInformation(string)
+            await bot.say(embed=embed)
 
 @bot.command(pass_context=True, name="showsub")
 async def showSubscription(ctx):
