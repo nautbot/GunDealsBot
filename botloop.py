@@ -223,6 +223,7 @@ def embedInformation(title, description=''):
         color=0x0079D8,
         )
     em.set_footer(text="This is an informational message.")
+    em.se
     return em
 
 ###################################
@@ -355,18 +356,16 @@ async def removeFeed(ctx):
         cur.execute('DELETE FROM feeds WHERE channelID=?',
                     (channelID,))
         sql.commit()
-        embed=discord.Embed(
-            title='✅ Removed feed from channel **{}**' \
-                  .format(channelName),
-            color=0x77B255
-        )
+
+        string = 'Removed feed from channel **{}**' \
+              .format(channelName),
+        embed = embedSuccess(string)
         await bot.say(embed=embed)
+
     else:
-        embed=discord.Embed(
-            title='❌ No feeds found for channel **{}**' \
-                  .format(channelName),
-            color=0xDD2E44
-        )
+        string = 'No feeds found for channel **{}**' \
+              .format(channelName),
+        embed = embedError(string)
         await bot.say(embed=embed)
 
 
