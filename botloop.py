@@ -192,6 +192,11 @@ async def on_ready():
         pass
     await asyncio.sleep(1)
 
+def prettifySubs(username, rows):
+    string = 'Subscriptions for user %s\n\n' % username
+    for row in rows:
+        string +=  row[0] + ' ' + row[1] + '\n'
+    return string
 
 ###################################
 ##### Subscription Management #####
@@ -246,20 +251,25 @@ async def unsubscribeAll(ctx):
     string = "{} has successfully dropped all subscriptions"
     await bot.say(string.format(ctx.message.author))
 
-    # TODO - Remove [0, many] records from db matching [userid] if any exist
-
+    if len(command) < 2:
+        await bot.say("Invalid command. Display help or do nada")
+    else:
+        return
 
 @bot.command(pass_context=True, name="showsub")
 async def showSubscription(ctx):
     print(dir(ctx))
     command = ctx.message.content.split()
 
-    string = "Gundeals subscriptions for {}: ..."
-    await bot.say(string.format(ctx.message.author))
+    if len(command) != 1:
+        await bot.say("Invalid command. Display help or do nada")
+    else:
+        cur.execute('SELECT * FROM subscriptions WHERE userID=?',
+                    (str(ctx.message.author.id),))
 
-    # TODO - Retrieve [0, many] records from db matching [userid] if any exist
+        string = prettifySubs(ctx.message.author.name, cur.fetchall())
 
-
+        await bot.say(string)
 
 ######################################
 ##### Feed Processing/Management #####
