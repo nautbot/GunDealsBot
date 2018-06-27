@@ -204,7 +204,7 @@ def prettifySubs(username, rows):
 
 @bot.command(pass_context=True, name="sub")
 async def subscribe(ctx):
-    command = ctx.message.content.split()
+    command = ctx.message.content.split(' ', 1)
 
     # A valid sub command must be followed by a pattern like: !sub item
     if len(command) < 2:
