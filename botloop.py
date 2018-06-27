@@ -273,14 +273,22 @@ async def addFeed(ctx):
     cur.execute('SELECT channelID FROM feeds WHERE channelID=?',
                 (channelID,))
     if cur.fetchone():
-       await bot.say('Feed already exists for channel {}' \
-                    .format(channelName))
+        embed=discord.Embed(
+            title='❌ Feed already exists for channel **{}**' \
+                  .format(channelName),
+            color=0xDD2E44
+        )
+        await bot.say(embed=embed)
     else:
         cur.execute('INSERT INTO feeds VALUES(?)',
                     (channelID,))
         sql.commit()
-        await bot.say('Added feed to channel {}' \
-                    .format(channelName))
+        embed=discord.Embed(
+            title='✅ Added feed to channel **{}**' \
+                  .format(channelName),
+            color=0x77B255
+        )
+        await bot.say(embed=embed)
 
 
 @checks.admin_or_permissions(manage_server=True)
@@ -293,11 +301,20 @@ async def removeFeed(ctx):
     if cur.fetchone():
         cur.execute('DELETE FROM feeds WHERE channelID=?',
                     (channelID,))
-        await bot.say('Removed feed from channel {}' \
-                    .format(channelName))
+        sql.commit()
+        embed=discord.Embed(
+            title='✅ Removed feed from channel **{}**' \
+                  .format(channelName),
+            color=0x77B255
+        )
+        await bot.say(embed=embed)
     else:
-        await bot.say('No feeds found for channel {}' \
-                    .format(channelName))
+        embed=discord.Embed(
+            title='❌ No feeds found for channel **{}**' \
+                  .format(channelName),
+            color=0xDD2E44
+        )
+        await bot.say(embed=embed)
 
 
 async def backgroundLoop():
@@ -333,7 +350,7 @@ async def backgroundLoop():
             sql.commit()
             cur.execute('VACUUM')
             newSubmissionsFound = False
-        await asyncio.sleep(60)
+        await asyncio.sleep(300)
 
 
 async def pushToFeeds(title, url):
