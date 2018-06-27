@@ -229,11 +229,11 @@ async def unsubscribe(ctx):
     if len(command) < 2:
         await bot.say("Invalid command. Display help or do nada")
     else:
-        cur.execute('SELECT * FROM subscriptions WHERE userID=? and matchPattern=?',
-                    (str(ctx.message.author.id), command[1]))
+        cur.execute('SELECT * FROM subscriptions WHERE id=? and userID=?',
+                    (command[1], str(ctx.message.author.id)))
         if cur.fetchone():
-            cur.execute('DELETE FROM subscriptions WHERE userID=? and matchPattern=?',
-                        (str(ctx.message.author.id), command[1]))
+            cur.execute('DELETE FROM subscriptions WHERE id=? and userID=?',
+                        (command[1], str(ctx.message.author.id)))
             sql.commit()
 
             string = "{} has successfully unsubscribed from {}"
