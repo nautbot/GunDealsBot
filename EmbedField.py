@@ -1,7 +1,7 @@
-""
-"
-This class represents a single field that can be added to type Discord.Embed ""
-"
+"""
+This class represents a single field that can be added to type Discord.Embed 
+"""
+
 
 class EmbedField:
     def __init__(self):
