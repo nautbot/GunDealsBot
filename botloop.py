@@ -223,7 +223,6 @@ def embedInformation(title, description=''):
         color=0x0079D8,
         )
     em.set_footer(text="This is an informational message.")
-    em.se
     return em
 
 ###################################
