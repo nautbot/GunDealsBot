@@ -53,7 +53,7 @@ version = '0.0.0'
 print('{} - {}'.format(username, version))
 start_time = datetime.datetime.utcnow()
 processedSubmissions = []
-
+MAX_SUBSCRIPTIONS = 25
 
 bot = commands.Bot(
     command_prefix=settings["discord"]["command_prefix"],
@@ -209,15 +209,16 @@ def embedSuccess(title, description=''):
     em.set_footer(text="This is a success message.")
     return em
 
-def embedInformation(title, fieldList, description=''):
+def embedInformation(title, fieldList=None, description=''):
     em = discord.Embed(
         title='ℹ️ {}'.format(title),
         description='%s' % description,
         color=0x0079D8,
         )
 
-    for field in fieldList:
-        em.add_field(name=field._name, value=field._value, inline=field._inline)
+    if fieldList is not None:
+        for field in fieldList:
+            em.add_field(name=field._name, value=field._value, inline=field._inline)
 
     em.set_footer(text="This is an informational message.")
     return em
@@ -234,22 +235,45 @@ async def subscribe(ctx):
     if len(command) < 2:
         await bot.say("Invalid command. Display help or do nada")
     else:
+        ###############################################
+        # Check if user already has this subscription #
+        ###############################################
         cur.execute('SELECT * FROM subscriptions WHERE userID=? and matchPattern=?',
                     (str(ctx.message.author.id), command[1]))
         if cur.fetchone():
             string = "User {} already has subscription to '{}'" \
                 .format(ctx.message.author.name, command[1])
-            embed = embedInformation(string)
+            embed = embedInformation(title=string)
             await bot.say(embed=embed)
-        else:
-            cur.execute('INSERT INTO subscriptions(userID, matchPattern) VALUES(?,?)',
-                        (str(ctx.message.author.id), command[1]))
-            sql.commit()
-            string = "User {} successfully subscribed to '{}'" \
-                .format(ctx.message.author.name, command[1])
+            return
 
-            embed = embedSuccess(string)
+        #####################################
+        # Get count of user's subscriptions #
+        #####################################
+        cur.execute('SELECT count(*) FROM subscriptions WHERE userID=?',
+                    (str(ctx.message.author.id),))
+        numRecords = cur.fetchone()[0]
+
+        if numRecords == MAX_SUBSCRIPTIONS:
+            title = "User {} already has max number of subscriptions ({})." \
+                .format(ctx.message.author.name, MAX_SUBSCRIPTIONS)
+            description = "Run {0}unsub <ID> command to free a slot. \n\nThen try {0}sub <ID>" \
+                .format(settings["discord"]["command_prefix"])
+            embed = embedInformation(title=title, description=description)
             await bot.say(embed=embed)
+            return
+
+        ############################
+        # Create new subscriptions #
+        ############################
+        cur.execute('INSERT INTO subscriptions(userID, matchPattern) VALUES(?,?)',
+                    (str(ctx.message.author.id), command[1]))
+        sql.commit()
+        string = "User {} successfully subscribed to '{}'" \
+            .format(ctx.message.author.name, command[1])
+
+        embed = embedSuccess(title=string)
+        await bot.say(embed=embed)
 
 @bot.command(pass_context=True, name="unsub")
 async def unsubscribe(ctx):
@@ -267,13 +291,13 @@ async def unsubscribe(ctx):
 
             string = "{} has successfully unsubscribed from {}" \
                 .format(ctx.message.author.name, command[1])
-            embed = embedSuccess(string)
+            embed = embedSuccess(title=string)
             await bot.say(embed=embed)
 
         else:
             string = "User {} doesn't have subscription to '{}'" \
                 .format(ctx.message.author, command[1])
-            embed = embedInformation(string)
+            embed = embedInformation(title=string)
             await bot.say(embed=embed)
 
 @bot.command(pass_context=True, name="unsuball")
@@ -292,13 +316,13 @@ async def unsubscribeAll(ctx):
 
             string = "{} has successfully dropped all subscriptions" \
                 .format(ctx.message.author.name)
-            embed = embedSuccess(string)
+            embed = embedSuccess(title=string)
             await bot.say(embed=embed)
 
         else:
             string = "User {} doesn't have any subscriptions" \
                 .format(ctx.message.author)
-            embed = embedInformation(string)
+            embed = embedInformation(title=string)
             await bot.say(embed=embed)
 
 @bot.command(pass_context=True, name="showsub")
@@ -322,7 +346,7 @@ async def showSubscription(ctx):
             string = "{}) {}".format(row[0], row[1])
 
             # '\u200b' is a zero width space. This is used when we don't want
-            # a name in the embed
+            # a name in an embed field
             field = EmbedField(value='\u200b', name=string, inline=False)
             fieldList.append(field)
 
