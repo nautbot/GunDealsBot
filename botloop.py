@@ -20,8 +20,6 @@ with open('botsettings.json') as settings_file:
     settings = json.load(settings_file)
 
 
-# TODO - Is WAL pragma needed to avoid DB contention between commands and background loop?
-
 sql = sqlite3.connect('sql.db')
 print('Loaded SQLite Database')
 cur = sql.cursor()
@@ -52,8 +50,12 @@ username = settings["discord"]["description"]
 version = '0.0.0'
 print('{} - {}'.format(username, version))
 start_time = datetime.datetime.utcnow()
+<<<<<<< HEAD
 processedSubmissions = []
 MAX_SUBSCRIPTIONS = 25
+=======
+
+>>>>>>> d400d771fe38e040ebfe1fd5871d8460e71dffb0
 
 bot = commands.Bot(
     command_prefix=settings["discord"]["command_prefix"],
@@ -409,31 +411,38 @@ async def backgroundLoop():
     await bot.wait_until_ready()
     while bot.is_logged_in and not bot.is_closed:
         newSubmissionsFound = False
-        r = requests.get(
-            settings['feed']['json_url'],
-            headers = {'User-agent': '{} - {}'.format(username, version)})
+        headers = {'User-agent': '{} - {}'.format(username, version)}
+        r = requests.get(settings['feed']['json_url'],
+                         headers=headers)
         subNew = r.json()
         for item in subNew['data']['children']:
             submissionID = str(item['data']['name'])
             submissionTitle = str(item['data']['title'])
-            submissionURL = 'https://www.reddit.com' + \
-                            str(item['data']['permalink'])
             submissionCreatedUTC = int(item['data']['created_utc'])
-            cur.execute('SELECT submissionID FROM ' \
-                        'processedSubmissions WHERE submissionID=?',
+            submissionURL = 'https://www.reddit.com/' + \
+                            str(item['data']['id'])
+            thumbnailURL = (str(item['data']['thumbnail']) \
+                           if str(item['data']['thumbnail']) != 'default' \
+                           else 'https://i.imgur.com/RMbd1PC.png')
+            cur.execute('SELECT submissionID ' \
+                        'FROM processedSubmissions ' \
+                        'WHERE submissionID=?',
                         (submissionID,))
             if not cur.fetchone():
                 newSubmissionsFound = True
-                await pushToFeeds(submissionTitle, submissionURL)
-                await pushToSubscriptions(submissionTitle, submissionURL)
+                await pushToFeeds(submissionTitle,
+                                  submissionURL)
+                await pushToSubscriptions(submissionTitle,
+                                          submissionURL,
+                                          thumbnailURL)
                 cur.execute('INSERT INTO processedSubmissions VALUES(?,?)',
                             (submissionID, submissionCreatedUTC))
                 sql.commit()
         if newSubmissionsFound == True:
             cur.execute('DELETE FROM processedSubmissions ' \
                         'WHERE submissionID NOT IN ' \
-                        '(SELECT submissionID FROM ' \
-                        'processedSubmissions ' \
+                        '(SELECT submissionID ' \
+                        'FROM processedSubmissions ' \
                         'ORDER BY createdUTC DESC LIMIT 50)')
             sql.commit()
             cur.execute('VACUUM')
@@ -442,44 +451,68 @@ async def backgroundLoop():
 
 
 async def pushToFeeds(title, url):
+    feedItem = '**{}**\n<{}>\n-'.format(title, url)
     cur.execute('SELECT channelID from feeds')
     for row in cur:
         channelID = str(row[0])
         try:
             channel = bot.get_channel(id=channelID)
-            await bot.send_message(
-                        channel,
-                        '**{}**\n<{}>\n-'.format(title, url)
-                    )
+            await bot.send_message(channel, feedItem)
         except discord.errors.NotFound as de:
-            print('pushToFeeds : discord.errors.NotFound (Server/Channel) : ', de)
+            print('pushToFeeds : ' \
+                  'discord.errors.NotFound ' \
+                  '(Server/Channel) : ', de)
             pass
-            # TODO - Delete feed if channel cannot be found?
         except Exception as e:
             print('pushToFeeds : ', e)
             pass
     await asyncio.sleep(0.1)
 
 
-async def pushToSubscriptions(title, url):
-    cur.execute('SELECT userID, matchPattern FROM subscriptions')
+async def pushToSubscriptions(title, url, thumbnailURL):
+    cur.execute('SELECT ID, userID, matchPattern ' \
+                'FROM subscriptions')
     for row in cur:
-        userID = str(row[0])
-        matchPattern = str(row[1]).lower().split(' ')
+        matchPattern = str(row[2]).lower().split(' ')
         if all([word in title.lower() for word in matchPattern]):
+            subscriptionID = str(row[0])
+            userID = str(row[1])
             try:
                 user = bot.get_user_info(userID)
-                await bot.send_message(
-                            user,
-                            '**{}**\n<{}>\n-'.format(title, url)
-                        )
             except discord.errors.NotFound as de:
-                print('pushToSubscriptions : discord.errors.NotFound (User) : ', de)
+                print('pushToSubscriptions : ' \
+                     'discord.errors.NotFound (User) : ', de)
                 pass
-                # TODO - Delete user subscriptions if user cannot be found?
             except Exception as e:
                 print('pushToSubscriptions : ', e)
                 pass
+            # field = EmbedField(name='**{}**'.format(url),
+            #     value='Reply with **{}unsub {}** ' \
+            #            'to cancel this subscription.' \
+            #            .format(settings["discord"]["command_prefix"],
+            #                    subscriptionID),
+            #     inline=False)
+            # fieldList = [field]
+            # embed = embedInformation(title='**New post found matching ' \
+            #     'your subscription "{}"!**' \
+            #     .format(matchPattern),
+            #     fieldList=fieldList,
+            #     description=title)
+            # embed.set_thumbnail(url=thumbnailURL)
+            embed = discord.Embed(
+                title='**New post found matching ' \
+                      'your subscription "{}"!**' \
+                      .format(matchPattern),
+                description=title,
+                color=0x0079D8)
+            embed.set_thumbnail(url=thumbnailURL)
+            embed.add_field(name='**{}**'.format(url), 
+                value='Reply with **{}unsub {}** ' \
+                       'to cancel this subscription.' \
+                       .format(settings["discord"]["command_prefix"],
+                               subscriptionID),
+                inline=False)
+            await bot.send_message(user, embed=embed)
     await asyncio.sleep(0.1)
 
 
