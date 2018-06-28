@@ -121,6 +121,11 @@ async def bot_status(ctx):
         )
     embed.add_field(name="Uptime:", value=passed, inline=False)
     embed.add_field(name="Version:", value=version, inline=False)
+    title="Last Started:"
+    description=start_time.strftime("%b %d, %Y at %I:%M:%S %p UTC"),
+    color=default_embed_color
+
+    embed = embedInformation
     await bot.say(embed=embed)
     print("Bot status requested by {}".format(ctx.message.author.name))
 
@@ -211,11 +216,11 @@ def embedSuccess(title, description=''):
     em.set_footer(text="This is a success message.")
     return em
 
-def embedInformation(title, fieldList, description=''):
+def embedInformation(title, fieldList, description='', color=0x0079D8):
     em = discord.Embed(
         title='ℹ️ {}'.format(title),
         description='%s' % description,
-        color=0x0079D8,
+        color=color,
         )
 
     for field in fieldList:
