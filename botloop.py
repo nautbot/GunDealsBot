@@ -52,7 +52,6 @@ username = settings["discord"]["description"]
 version = '0.0.0'
 print('{} - {}'.format(username, version))
 start_time = datetime.datetime.utcnow()
-default_embed_color = 0x669999
 processedSubmissions = []
 
 
@@ -114,21 +113,15 @@ def get_bot_uptime(*, brief=False):
 @bot.command(pass_context=True, name="status")
 async def bot_status(ctx):
     passed = get_bot_uptime()
-    embed=discord.Embed(
-            title="Last Started:",
-            description=start_time.strftime("%b %d, %Y at %I:%M:%S %p UTC"),
-            color=default_embed_color
-        )
-    embed.add_field(name="Uptime:", value=passed, inline=False)
-    embed.add_field(name="Version:", value=version, inline=False)
-    title="Last Started:"
-    description=start_time.strftime("%b %d, %Y at %I:%M:%S %p UTC"),
-    color=default_embed_color
+    lastStarted=start_time.strftime("%b %d, %Y at %I:%M:%S %p UTC")
 
-    embed = embedInformation
+    lastStartedField = EmbedField(name="Last Started:", value=lastStarted, inline=False)
+    uptimeField = EmbedField(name="Uptime:", value=passed, inline=False)
+    versionField = EmbedField(name="Version:", value=version, inline=False)
+    fieldList = [lastStartedField, uptimeField, versionField]
+
+    embed = embedInformation(title="Bot Status", fieldList=fieldList)
     await bot.say(embed=embed)
-    print("Bot status requested by {}".format(ctx.message.author.name))
-
 
 @bot.event
 async def on_command_error(error, ctx):
@@ -216,11 +209,11 @@ def embedSuccess(title, description=''):
     em.set_footer(text="This is a success message.")
     return em
 
-def embedInformation(title, fieldList, description='', color=0x0079D8):
+def embedInformation(title, fieldList, description=''):
     em = discord.Embed(
         title='ℹ️ {}'.format(title),
         description='%s' % description,
-        color=color,
+        color=0x0079D8,
         )
 
     for field in fieldList:
@@ -330,7 +323,7 @@ async def showSubscription(ctx):
 
             # '\u200b' is a zero width space. This is used when we don't want
             # a name in the embed
-            field = EmbedField(value='\u200b'string, name=, inline=False)
+            field = EmbedField(value='\u200b', name=string, inline=False)
             fieldList.append(field)
 
         title = "Subscriptions for user %s" % ctx.message.author.name
