@@ -20,7 +20,7 @@ with open('botsettings.json') as settings_file:
     settings = json.load(settings_file)
 
 
-sql = sqlite3.connect('sql.db')
+sql = sqlite3.connect('sql.db', check_same_thread=False)
 print('Loaded SQLite Database')
 cur = sql.cursor()
 
@@ -50,12 +50,8 @@ username = settings["discord"]["description"]
 version = '0.0.0'
 print('{} - {}'.format(username, version))
 start_time = datetime.datetime.utcnow()
-<<<<<<< HEAD
-processedSubmissions = []
 MAX_SUBSCRIPTIONS = 25
-=======
 
->>>>>>> d400d771fe38e040ebfe1fd5871d8460e71dffb0
 
 bot = commands.Bot(
     command_prefix=settings["discord"]["command_prefix"],
@@ -369,7 +365,7 @@ async def addFeed(ctx):
     cur.execute('SELECT channelID FROM feeds WHERE channelID=?',
                 (channelID,))
     if cur.fetchone():
-        string = 'Feed already exists for channel **{}**' \
+        string = "Feed already exists for channel **{}**" \
             .format(channelName)
         embed = embedInformation(string)
         await bot.say(embed=embed)
@@ -378,8 +374,8 @@ async def addFeed(ctx):
                     (channelID,))
         sql.commit()
 
-        string = 'Added feed to channel **{}**' \
-              .format(channelName),
+        string = "Added feed to channel **{}**" \
+              .format(channelName)
         embed = embedSuccess(string)
         await bot.say(embed=embed)
 
@@ -395,14 +391,14 @@ async def removeFeed(ctx):
                     (channelID,))
         sql.commit()
 
-        string = 'Removed feed from channel **{}**' \
-              .format(channelName),
+        string = "Removed feed from channel **{}**" \
+              .format(channelName)
         embed = embedSuccess(string)
         await bot.say(embed=embed)
 
     else:
-        string = 'No feeds found for channel **{}**' \
-              .format(channelName),
+        string = "No feeds found for channel **{}**" \
+              .format(channelName)
         embed = embedError(string)
         await bot.say(embed=embed)
 
