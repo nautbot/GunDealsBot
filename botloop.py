@@ -14,6 +14,7 @@ import sqlite3
 
 import checks
 
+from EmbedField import EmbedField
 
 with open('botsettings.json') as settings_file:
     settings = json.load(settings_file)
@@ -192,12 +193,6 @@ async def on_ready():
         pass
     await asyncio.sleep(1)
 
-def prettifySubs(username, rows):
-    string = 'Subscriptions for user %s\n\n' % username
-    for row in rows:
-        string +=  str(row[0]) + ' ' + row[2] + '\n'
-    return string
-
 def embedError(title, description=''):
     em = discord.Embed(
         title='❌ {}'.format(title),
@@ -216,12 +211,16 @@ def embedSuccess(title, description=''):
     em.set_footer(text="This is a success message.")
     return em
 
-def embedInformation(title, description=''):
+def embedInformation(title, fieldList, description=''):
     em = discord.Embed(
         title='ℹ️ {}'.format(title),
         description='%s' % description,
         color=0x0079D8,
         )
+
+    for field in fieldList:
+        em.add_field(name=field._name, value=field._value, inline=field._inline)
+
     em.set_footer(text="This is an informational message.")
     return em
 
@@ -311,12 +310,28 @@ async def showSubscription(ctx):
     if len(command) != 1:
         await bot.say("Invalid command. Display help or do nada")
     else:
-        cur.execute('SELECT * FROM subscriptions WHERE userID=?',
+        # Get number of subscriptions
+        cur.execute('SELECT count(*) FROM subscriptions WHERE userID=?',
+                    (str(ctx.message.author.id),))
+        numRecords = cur.fetchone()[0]
+
+        # Get subscriptions
+        cur.execute('SELECT id, matchPattern FROM subscriptions WHERE userID=?',
                     (str(ctx.message.author.id),))
 
-        string = prettifySubs(ctx.message.author.name, cur.fetchall())
+        fieldList = list()
+        for row in cur:
+            string = "{}) {}".format(row[0], row[1])
 
-        await bot.say(string)
+            # '\u200b' is a zero width space. This is used when we don't want
+            # a name in the embed
+            field = EmbedField(value='\u200b'string, name=, inline=False)
+            fieldList.append(field)
+
+        title = "Subscriptions for user %s" % ctx.message.author.name
+        description = "User has %d subscriptions." % numRecords
+        embed = embedInformation(title=title, fieldList=fieldList, description=description)
+        await bot.say(embed=embed)
 
 ######################################
 ##### Feed Processing/Management #####
