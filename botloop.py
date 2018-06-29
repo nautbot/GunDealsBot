@@ -363,16 +363,19 @@ async def help(ctx):
         await bot.say("Invalid command. Display help or do nada")
     else:
         title = "Available commands for gundeals bot"
-        #settings["discord"]["command_prefix"]
-
 
         fieldSub = EmbedField(value='Subscribe to a matchPattern to be notified of deals matching pattern',
-            name="sub <matchPattern>",
+            name="%ssub <matchPattern>" % settings["discord"]["command_prefix"],
             inline=False)
-
-        fieldUnsub = EmbedField(value='Unsubscribe from a matchPattern', name="unsub <subId>", inline=False)
-        fieldUnsuball = EmbedField(value='Unsubscribe from all subscriptions', name="unsuball", inline=False)
-        fieldShowsub = EmbedField(value='Show your current subscriptions in form: [subId] [matchPattern]', name="showsub", inline=False)
+        fieldUnsub = EmbedField(value='Unsubscribe from a matchPattern',
+            name="%sunsub <subId>"  % settings["discord"]["command_prefix"],
+            inline=False)
+        fieldUnsuball = EmbedField(value='Unsubscribe from all subscriptions',
+            name="%sunsuball"  % settings["discord"]["command_prefix"],
+            inline=False)
+        fieldShowsub = EmbedField(value='Show your current subscriptions in form: [subId] [matchPattern]',
+            name="%sshowsub"  % settings["discord"]["command_prefix"],
+            inline=False)
         fieldList = list((fieldSub, fieldUnsub, fieldUnsuball, fieldShowsub))
         embed = embedInformation(title=title, fieldList=fieldList)
         await bot.say(embed=embed)
