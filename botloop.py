@@ -223,6 +223,11 @@ def embedInformation(title, fieldList=None, description=''):
     em.set_footer(text="This is an informational message.")
     return em
 
+async def showHelp():
+    title = "Invalid command"
+    description = "For help, enter: %shelp" % settinunption)
+    await bot.say(embed=embed)
+
 ###################################
 ##### Subscription Management #####
 ###################################
@@ -233,7 +238,7 @@ async def subscribe(ctx):
 
     # A valid sub command must be followed by a pattern like: !sub item
     if len(command) < 2:
-        await bot.say("Invalid command. Display help or do nada")
+        await showHelp()
     else:
         ###############################################
         # Check if user already has this subscription #
@@ -277,10 +282,10 @@ async def subscribe(ctx):
 
 @bot.command(pass_context=True, name="unsub")
 async def unsubscribe(ctx):
-    command = ctx.message.content.split()
+    command = ctx.message.content.split(' ', 1)
 
     if len(command) < 2:
-        await bot.say("Invalid command. Display help or do nada")
+        await showHelp()
     else:
         cur.execute('SELECT * FROM subscriptions WHERE id=? and userID=?',
                     (command[1], str(ctx.message.author.id)))
@@ -305,7 +310,7 @@ async def unsubscribeAll(ctx):
     command = ctx.message.content.split()
 
     if len(command) != 1:
-        await bot.say("Invalid command. Display help or do nada")
+        await showHelp()
     else:
         cur.execute('SELECT * FROM subscriptions WHERE userID=?',
                     (str(ctx.message.author.id),))
@@ -330,7 +335,7 @@ async def showSubscription(ctx):
     command = ctx.message.content.split()
 
     if len(command) != 1:
-        await bot.say("Invalid command. Display help or do nada")
+        await showHelp()
     else:
         # Get number of subscriptions
         cur.execute('SELECT count(*) FROM subscriptions WHERE userID=?',
@@ -360,7 +365,7 @@ async def help(ctx):
     command = ctx.message.content.split()
 
     if len(command) != 1:
-        await bot.say("Invalid command. Display help or do nada")
+        await showHelp()
     else:
         title = "Available commands for gundeals bot"
 
