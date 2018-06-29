@@ -225,7 +225,8 @@ def embedInformation(title, fieldList=None, description=''):
 
 async def showHelp():
     title = "Invalid command"
-    description = "For help, enter: %shelp" % settinunption)
+    description = "For help, enter: %shelp" % settings["discord"]["command_prefix"]
+    embed=embedError(title=title, description=description)
     await bot.say(embed=embed)
 
 ###################################
