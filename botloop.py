@@ -58,6 +58,8 @@ bot = commands.Bot(
     description=settings["discord"]["description"]
 )
 
+# Remove default help command so we can customise
+bot.remove_command('help')
 
 @checks.admin_or_permissions(manage_server=True)
 @bot.command(pass_context=True, name="restart")
@@ -353,6 +355,28 @@ async def showSubscription(ctx):
         embed = embedInformation(title=title, fieldList=fieldList, description=description)
         await bot.say(embed=embed)
 
+@bot.command(pass_context=True, name="help")
+async def help(ctx):
+    command = ctx.message.content.split()
+
+    if len(command) != 1:
+        await bot.say("Invalid command. Display help or do nada")
+    else:
+        title = "Available commands for gundeals bot"
+        #settings["discord"]["command_prefix"]
+
+
+        fieldSub = EmbedField(value='Subscribe to a matchPattern to be notified of deals matching pattern',
+            name="sub <matchPattern>",
+            inline=False)
+
+        fieldUnsub = EmbedField(value='Unsubscribe from a matchPattern', name="unsub <subId>", inline=False)
+        fieldUnsuball = EmbedField(value='Unsubscribe from all subscriptions', name="unsuball", inline=False)
+        fieldShowsub = EmbedField(value='Show your current subscriptions in form: [subId] [matchPattern]', name="showsub", inline=False)
+        fieldList = list((fieldSub, fieldUnsub, fieldUnsuball, fieldShowsub))
+        embed = embedInformation(title=title, fieldList=fieldList)
+        await bot.say(embed=embed)
+
 ######################################
 ##### Feed Processing/Management #####
 ######################################
@@ -502,7 +526,7 @@ async def pushToSubscriptions(title, url, thumbnailURL):
                 description=title,
                 color=0x0079D8)
             embed.set_thumbnail(url=thumbnailURL)
-            embed.add_field(name='**{}**'.format(url), 
+            embed.add_field(name='**{}**'.format(url),
                 value='Reply with **{}unsub {}** ' \
                        'to cancel this subscription.' \
                        .format(settings["discord"]["command_prefix"],
