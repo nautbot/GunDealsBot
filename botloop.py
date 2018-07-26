@@ -439,43 +439,48 @@ async def removeFeed(ctx):
 async def backgroundLoop():
     await bot.wait_until_ready()
     while bot.is_logged_in and not bot.is_closed:
-        newSubmissionsFound = False
-        headers = {'User-agent': '{} - {}'.format(username, version)}
-        r = requests.get(settings['feed']['json_url'],
-                         headers=headers)
-        subNew = r.json()
-        for item in subNew['data']['children']:
-            submissionID = str(item['data']['name'])
-            submissionTitle = str(item['data']['title'])
-            submissionCreatedUTC = int(item['data']['created_utc'])
-            submissionURL = 'https://www.reddit.com/' + \
-                            str(item['data']['id'])
-            thumbnailURL = (str(item['data']['thumbnail']) \
-                           if str(item['data']['thumbnail']) != 'default' \
-                           else 'https://i.imgur.com/RMbd1PC.png')
-            cur.execute('SELECT submissionID ' \
-                        'FROM processedSubmissions ' \
-                        'WHERE submissionID=?',
-                        (submissionID,))
-            if not cur.fetchone():
-                newSubmissionsFound = True
-                await pushToFeeds(submissionTitle,
-                                  submissionURL)
-                await pushToSubscriptions(submissionTitle,
-                                          submissionURL,
-                                          thumbnailURL)
-                cur.execute('INSERT INTO processedSubmissions VALUES(?,?)',
-                            (submissionID, submissionCreatedUTC))
-                sql.commit()
-        if newSubmissionsFound == True:
-            cur.execute('DELETE FROM processedSubmissions ' \
-                        'WHERE submissionID NOT IN ' \
-                        '(SELECT submissionID ' \
-                        'FROM processedSubmissions ' \
-                        'ORDER BY createdUTC DESC LIMIT 50)')
-            sql.commit()
-            cur.execute('VACUUM')
+        try:
             newSubmissionsFound = False
+            headers = {'User-agent': '{} - {}'.format(username, version)}
+            r = requests.get(settings['feed']['json_url'],
+                            headers=headers)
+            subNew = r.json()
+            for item in subNew['data']['children']:
+                submissionID = str(item['data']['name'])
+                submissionTitle = str(item['data']['title'])
+                submissionCreatedUTC = int(item['data']['created_utc'])
+                submissionURL = 'https://www.reddit.com/' + \
+                                str(item['data']['id'])
+                thumbnailURL = (str(item['data']['thumbnail']) \
+                            if str(item['data']['thumbnail']) != 'default' \
+                            else 'https://i.imgur.com/RMbd1PC.png')
+                cur.execute('SELECT submissionID ' \
+                            'FROM processedSubmissions ' \
+                            'WHERE submissionID=?',
+                            (submissionID,))
+                if not cur.fetchone():
+                    newSubmissionsFound = True
+                    await pushToFeeds(submissionTitle,
+                                    submissionURL)
+                    await pushToSubscriptions(submissionTitle,
+                                            submissionURL,
+                                            thumbnailURL)
+                    cur.execute('INSERT INTO processedSubmissions VALUES(?,?)',
+                                (submissionID, submissionCreatedUTC))
+                    sql.commit()
+            if newSubmissionsFound == True:
+                cur.execute('DELETE FROM processedSubmissions ' \
+                            'WHERE submissionID NOT IN ' \
+                            '(SELECT submissionID ' \
+                            'FROM processedSubmissions ' \
+                            'ORDER BY createdUTC DESC LIMIT 50)')
+                sql.commit()
+                cur.execute('VACUUM')
+                newSubmissionsFound = False
+            await asyncio.sleep(0.1)
+        except Exception as e:
+            print('backgroundLoop : ', e)
+            pass
         await asyncio.sleep(300)
 
 
