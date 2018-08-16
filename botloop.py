@@ -27,7 +27,7 @@ cur = sql.cursor()
 ## Create processedSubmissions table
 sql.execute('CREATE TABLE IF NOT EXISTS ' \
     'processedSubmissions(' \
-    'submissionID TEXT NOT NULL PRIMARY KEY, ' \
+    'ID TEXT NOT NULL PRIMARY KEY, ' \
     'createdUTC INTEGER NOT NULL)')
 
 ## Create feeds table
@@ -454,9 +454,9 @@ async def backgroundLoop():
                 thumbnailURL = (str(item['data']['thumbnail']) \
                             if str(item['data']['thumbnail']) != 'default' \
                             else 'https://i.imgur.com/RMbd1PC.png')
-                cur.execute('SELECT submissionID ' \
+                cur.execute('SELECT ID ' \
                             'FROM processedSubmissions ' \
-                            'WHERE submissionID=?',
+                            'WHERE ID=?',
                             (submissionID,))
                 if not cur.fetchone():
                     newSubmissionsFound = True
@@ -470,8 +470,8 @@ async def backgroundLoop():
                     sql.commit()
             if newSubmissionsFound == True:
                 cur.execute('DELETE FROM processedSubmissions ' \
-                            'WHERE submissionID NOT IN ' \
-                            '(SELECT submissionID ' \
+                            'WHERE ID NOT IN ' \
+                            '(SELECT ID ' \
                             'FROM processedSubmissions ' \
                             'ORDER BY createdUTC DESC LIMIT 50)')
                 sql.commit()
