@@ -1,7 +1,4 @@
 import sys
-import os
-import math
-import time
 import datetime
 import asyncio
 import traceback
@@ -15,34 +12,18 @@ import sqlite3
 import checks
 
 from EmbedField import EmbedField
+from DataAccess import DataAccess
 
 with open('botsettings.json') as settings_file:
     settings = json.load(settings_file)
 
 
+data = DataAccess()
+
+# TODO: Remove SQL connection from main bot module
 sql = sqlite3.connect('sql.db', check_same_thread=False)
 print('Loaded SQLite Database')
 cur = sql.cursor()
-
-## Create processedSubmissions table
-sql.execute('CREATE TABLE IF NOT EXISTS ' \
-    'processedSubmissions(' \
-    'ID TEXT NOT NULL PRIMARY KEY, ' \
-    'createdUTC INTEGER NOT NULL)')
-
-## Create feeds table
-sql.execute('CREATE TABLE IF NOT EXISTS ' \
-    'feeds(' \
-    'channelID TEXT NOT NULL PRIMARY KEY)')
-
-## Create subscriptions table
-sql.execute('CREATE TABLE IF NOT EXISTS ' \
-    'subscriptions(' \
-    'id INTEGER PRIMARY KEY, ' \
-    'userID TEXT NOT NULL, ' \
-    'matchPattern TEXT NOT NULL)')
-
-sql.commit()
 
 
 # Application info
@@ -390,6 +371,7 @@ async def help(ctx):
 ##### Feed Processing/Management #####
 ######################################
 
+
 @checks.admin_or_permissions(manage_server=True)
 @bot.command(pass_context=True, name="addfeed")
 async def addFeed(ctx):
@@ -411,6 +393,7 @@ async def addFeed(ctx):
               .format(channelName)
         embed = embedSuccess(string)
         await bot.say(embed=embed)
+
 
 @checks.admin_or_permissions(manage_server=True)
 @bot.command(pass_context=True, name="removefeed")
@@ -439,115 +422,81 @@ async def removeFeed(ctx):
 async def backgroundLoop():
     await bot.wait_until_ready()
     while bot.is_logged_in and not bot.is_closed:
-        try:
-            newSubmissionsFound = False
-            headers = {'User-agent': '{} - {}'.format(username, version)}
-            r = requests.get(settings['feed']['json_url'],
-                            headers=headers)
-            subNew = r.json()
-            for item in subNew['data']['children']:
-                submissionID = str(item['data']['name'])
-                submissionTitle = str(item['data']['title'])
-                submissionCreatedUTC = int(item['data']['created_utc'])
-                submissionURL = 'https://www.reddit.com/' + \
-                                str(item['data']['id'])
-                thumbnailURL = (str(item['data']['thumbnail']) \
-                            if str(item['data']['thumbnail']) != 'default' \
-                            else 'https://i.imgur.com/RMbd1PC.png')
-                cur.execute('SELECT ID ' \
-                            'FROM processedSubmissions ' \
-                            'WHERE ID=?',
-                            (submissionID,))
-                if not cur.fetchone():
-                    newSubmissionsFound = True
-                    await pushToFeeds(submissionTitle,
-                                    submissionURL)
-                    await pushToSubscriptions(submissionTitle,
-                                            submissionURL,
-                                            thumbnailURL)
-                    cur.execute('INSERT INTO processedSubmissions VALUES(?,?)',
-                                (submissionID, submissionCreatedUTC))
-                    sql.commit()
-            if newSubmissionsFound == True:
-                cur.execute('DELETE FROM processedSubmissions ' \
-                            'WHERE ID NOT IN ' \
-                            '(SELECT ID ' \
-                            'FROM processedSubmissions ' \
-                            'ORDER BY createdUTC DESC LIMIT 50)')
-                sql.commit()
-                cur.execute('VACUUM')
-                newSubmissionsFound = False
-            await asyncio.sleep(0.1)
-        except Exception as e:
-            print('backgroundLoop : ', e)
-            pass
+        await processNewSubmissions()
         await asyncio.sleep(300)
 
 
-async def pushToFeeds(title, url):
-    feedItem = '**{}**\n<{}>\n-'.format(title, url)
-    cur.execute('SELECT channelID from feeds')
-    for row in cur:
-        channelID = str(row[0])
+async def processNewSubmissions():
+    try:
+        newSubmissionsFound = False
+        headers = {'User-agent': '{} - {}'.format(username, version)}
+        r = requests.get(settings['feed']['json_url'], headers=headers)
+        subNew = r.json()
+        for item in subNew['data']['children']:
+            submissionID = str(item['data']['name'])
+            if not data.IsProcessedSubmission(submissionID):
+                newSubmissionsFound = True
+                submissionTitle = str(item['data']['title'])
+                submissionCreatedUTC = int(item['data']['created_utc'])
+                submissionURL = 'https://www.reddit.com{}'.format(str(item['data']['permalink']))
+                thumbnailURL = str(item['data']['thumbnail'])
+                await pushToFeeds(submissionTitle, submissionURL)
+                await pushToSubscriptions(submissionTitle, submissionURL, thumbnailURL)
+                data.InsertProcessedSubmission(submissionID, submissionCreatedUTC)
+        if newSubmissionsFound:
+            data.RemoveOldProcessedSubmissions()
+            newSubmissionsFound = False
+        await asyncio.sleep(0.1)
+    except Exception as e:
+        print('backgroundLoop : ', e)
+        pass
+    await asyncio.sleep(300)
+
+
+async def pushToFeeds(submissionTitle, submissionURL):
+    feedItem = '**{}**\n<{}>\n-'.format(submissionTitle, submissionURL)
+    feedChannels = data.GetAllFeedChannels()
+    for channelID in feedChannels:
         try:
             channel = bot.get_channel(id=channelID)
             await bot.send_message(channel, feedItem)
         except discord.errors.NotFound as de:
-            print('pushToFeeds : ' \
-                  'discord.errors.NotFound ' \
-                  '(Server/Channel) : ', de)
+            print('pushToFeeds : discord.errors.NotFound (Server/Channel) : ', de)
             pass
         except Exception as e:
             print('pushToFeeds : ', e)
             pass
-    await asyncio.sleep(0.1)
+        await asyncio.sleep(0.1)
 
 
-async def pushToSubscriptions(title, url, thumbnailURL):
-    cur.execute('SELECT ID, userID, matchPattern ' \
-                'FROM subscriptions')
-    for row in cur:
-        matchPattern = str(row[2]).lower().split(' ')
-        if all([word in title.lower() for word in matchPattern]):
-            subscriptionID = str(row[0])
-            userID = str(row[1])
+async def pushToSubscriptions(submissionTitle, submissionURL, thumbnailURL):
+    if str.lower(thumbnailURL) == 'default':
+        thumbnailURL = settings['subscription']['default_thumbnail']
+    else:
+        thumbnailURL = 'https://www.reddit.com/{}'.format(thumbnailURL)
+    subscriptions = data.GetAllSubscriptions()
+    for subscription in subscriptions:
+        if all([word in submissionTitle.lower() for word in subscription["matchPattern"]]):
             try:
-                user = bot.get_user_info(userID)
+                title = '**New post found matching your subscription "{}"!**'.format(subscription["matchPattern"])
+                user = bot.get_user_info(subscription["userID"])
+                embed = discord.Embed(
+                    title=title,
+                    description=submissionTitle,
+                    color=0x0079D8)
+                embed.set_thumbnail(url=thumbnailURL)
+                footer = 'Reply with **{}unsub {}** to cancel this subscription.'
+                embed.add_field(name='**{}**'.format(submissionURL),
+                                value=footer.format(bot.command_prefix, subscription["ID"]),
+                                inline=False)
+                await bot.send_message(user, embed=embed)
             except discord.errors.NotFound as de:
-                print('pushToSubscriptions : ' \
-                     'discord.errors.NotFound (User) : ', de)
+                print('pushToSubscriptions : discord.errors.NotFound (User) : ', de)
                 pass
             except Exception as e:
                 print('pushToSubscriptions : ', e)
                 pass
-            # field = EmbedField(name='**{}**'.format(url),
-            #     value='Reply with **{}unsub {}** ' \
-            #            'to cancel this subscription.' \
-            #            .format(settings["discord"]["command_prefix"],
-            #                    subscriptionID),
-            #     inline=False)
-            # fieldList = [field]
-            # embed = embedInformation(title='**New post found matching ' \
-            #     'your subscription "{}"!**' \
-            #     .format(matchPattern),
-            #     fieldList=fieldList,
-            #     description=title)
-            # embed.set_thumbnail(url=thumbnailURL)
-            embed = discord.Embed(
-                title='**New post found matching ' \
-                      'your subscription "{}"!**' \
-                      .format(matchPattern),
-                description=title,
-                color=0x0079D8)
-            embed.set_thumbnail(url=thumbnailURL)
-            embed.add_field(name='**{}**'.format(url),
-                value='Reply with **{}unsub {}** ' \
-                       'to cancel this subscription.' \
-                       .format(settings["discord"]["command_prefix"],
-                               subscriptionID),
-                inline=False)
-            await bot.send_message(user, embed=embed)
-    await asyncio.sleep(0.1)
+        await asyncio.sleep(0.1)
 
 
 bot.loop.create_task(backgroundLoop())

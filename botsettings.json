@@ -1,11 +1,14 @@
 {
     "discord" : {
-        "client_token" : "NDYwOTg2MDUwNTIxNTk1OTM1.DhNAAg._bAl-JsLTxJzE6C8jJomTwup3_A",
-        "description" : "GunDealsBot",
-        "command_prefix" : "!",
+        "client_token" : "NDYwOTkxMTMwMjM1MDQzODUw.DhXqAw.TDflGpG9-LU0yZFYZWKQAlxtWnI",
+        "description" : "OtherGunDealsBot",
+        "command_prefix" : ";",
         "game" : "game"
     },
     "feed" : {
         "json_url" : "https://www.reddit.com/r/gundeals/new/.json"
+    },
+    "subscription" : {
+        "default_thumbnail" : "https://i.imgur.com/RMbd1PC.png"
     }
 }
