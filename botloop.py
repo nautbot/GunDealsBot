@@ -9,11 +9,40 @@ import json
 
 import discord
 from discord.ext import commands
+import requests
 import sqlite3
 
+import checks
+
+from EmbedField import EmbedField
 
 with open('botsettings.json') as settings_file:
     settings = json.load(settings_file)
+
+
+sql = sqlite3.connect('sql.db', check_same_thread=False)
+print('Loaded SQLite Database')
+cur = sql.cursor()
+
+## Create processedSubmissions table
+sql.execute('CREATE TABLE IF NOT EXISTS ' \
+    'processedSubmissions(' \
+    'ID TEXT NOT NULL PRIMARY KEY, ' \
+    'createdUTC INTEGER NOT NULL)')
+
+## Create feeds table
+sql.execute('CREATE TABLE IF NOT EXISTS ' \
+    'feeds(' \
+    'channelID TEXT NOT NULL PRIMARY KEY)')
+
+## Create subscriptions table
+sql.execute('CREATE TABLE IF NOT EXISTS ' \
+    'subscriptions(' \
+    'id INTEGER PRIMARY KEY, ' \
+    'userID TEXT NOT NULL, ' \
+    'matchPattern TEXT NOT NULL)')
+
+sql.commit()
 
 
 # Application info
@@ -21,7 +50,7 @@ username = settings["discord"]["description"]
 version = '0.0.0'
 print('{} - {}'.format(username, version))
 start_time = datetime.datetime.utcnow()
-default_embed_color = 0x669999
+MAX_SUBSCRIPTIONS = 25
 
 
 bot = commands.Bot(
@@ -29,12 +58,10 @@ bot = commands.Bot(
     description=settings["discord"]["description"]
 )
 
+# Remove default help command so we can customise
+bot.remove_command('help')
 
-@bot.command(pass_context=True, name="test")
-async def serve(ctx):
-    await bot.say('test')
-
-
+@checks.admin_or_permissions(manage_server=True)
 @bot.command(pass_context=True, name="restart")
 async def bot_restart(ctx):
     try:
@@ -51,9 +78,17 @@ async def bot_restart(ctx):
         pass
         sys.exit(0)
 
+
+@checks.admin_or_permissions(manage_server=True)
 @bot.command(pass_context=True, name="ping")
 async def bot_ping(ctx):
-    await ctx.send('Pong! {0}'.format(round(bot.latency, 1)))
+    pong_message = await bot.say("Pong!")
+    await asyncio.sleep(0.5)
+    delta = pong_message.timestamp - ctx.message.timestamp
+    millis = delta.days * 24 * 60 * 60 * 1000
+    millis += delta.seconds * 1000
+    millis += delta.microseconds / 1000
+    await bot.edit_message(pong_message, "Pong! `{}ms`".format(int(millis)))
 
 
 def get_bot_uptime(*, brief=False):
@@ -74,19 +109,19 @@ def get_bot_uptime(*, brief=False):
     return fmt.format(d=days, h=hours, m=minutes, s=seconds)
 
 
+@checks.admin_or_permissions(manage_server=True)
 @bot.command(pass_context=True, name="status")
 async def bot_status(ctx):
     passed = get_bot_uptime()
-    embed=discord.Embed(
-            title="Last Started:",
-            description=start_time.strftime("%b %d, %Y at %I:%M:%S %p UTC"),
-            color=default_embed_color
-        )
-    embed.add_field(name="Uptime:", value=passed, inline=False)
-    embed.add_field(name="Version:", value=version, inline=False)
-    await bot.say(embed=embed)
-    print("Bot status requested by {}".format(ctx.message.author.name))
+    lastStarted=start_time.strftime("%b %d, %Y at %I:%M:%S %p UTC")
 
+    lastStartedField = EmbedField(name="Last Started:", value=lastStarted, inline=False)
+    uptimeField = EmbedField(name="Uptime:", value=passed, inline=False)
+    versionField = EmbedField(name="Version:", value=version, inline=False)
+    fieldList = [lastStartedField, uptimeField, versionField]
+
+    embed = embedInformation(title="Bot Status", fieldList=fieldList)
+    await bot.say(embed=embed)
 
 @bot.event
 async def on_command_error(error, ctx):
@@ -156,5 +191,364 @@ async def on_ready():
         pass
     await asyncio.sleep(1)
 
+def embedError(title, description=''):
+    em = discord.Embed(
+        title='❌ {}'.format(title),
+        description='%s' % description,
+        color=0xDD2E44
+    )
+    em.set_footer(text="This is an error message.")
+    return em
 
+def embedSuccess(title, description=''):
+    em = discord.Embed(
+        title='✅ {}'.format(title),
+        description='%s' % description,
+        color=0x77B255
+    )
+    em.set_footer(text="This is a success message.")
+    return em
+
+def embedInformation(title, fieldList=None, description=''):
+    em = discord.Embed(
+        title='ℹ️ {}'.format(title),
+        description='%s' % description,
+        color=0x0079D8,
+        )
+
+    if fieldList is not None:
+        for field in fieldList:
+            em.add_field(name=field._name, value=field._value, inline=field._inline)
+
+    em.set_footer(text="This is an informational message.")
+    return em
+
+async def showHelp():
+    title = "Invalid command"
+    description = "For help, enter: %shelp" % settings["discord"]["command_prefix"]
+    embed=embedError(title=title, description=description)
+    await bot.say(embed=embed)
+
+###################################
+##### Subscription Management #####
+###################################
+
+@bot.command(pass_context=True, name="sub")
+async def subscribe(ctx):
+    command = ctx.message.content.split(' ', 1)
+
+    # A valid sub command must be followed by a pattern like: !sub item
+    if len(command) < 2:
+        await showHelp()
+    else:
+        ###############################################
+        # Check if user already has this subscription #
+        ###############################################
+        cur.execute('SELECT * FROM subscriptions WHERE userID=? and matchPattern=?',
+                    (str(ctx.message.author.id), command[1]))
+        if cur.fetchone():
+            string = "User {} already has subscription to '{}'" \
+                .format(ctx.message.author.name, command[1])
+            embed = embedInformation(title=string)
+            await bot.say(embed=embed)
+            return
+
+        #####################################
+        # Get count of user's subscriptions #
+        #####################################
+        cur.execute('SELECT count(*) FROM subscriptions WHERE userID=?',
+                    (str(ctx.message.author.id),))
+        numRecords = cur.fetchone()[0]
+
+        if numRecords == MAX_SUBSCRIPTIONS:
+            title = "User {} already has max number of subscriptions ({})." \
+                .format(ctx.message.author.name, MAX_SUBSCRIPTIONS)
+            description = "Run {0}unsub <ID> command to free a slot. \n\nThen try {0}sub <ID>" \
+                .format(settings["discord"]["command_prefix"])
+            embed = embedInformation(title=title, description=description)
+            await bot.say(embed=embed)
+            return
+
+        ############################
+        # Create new subscriptions #
+        ############################
+        cur.execute('INSERT INTO subscriptions(userID, matchPattern) VALUES(?,?)',
+                    (str(ctx.message.author.id), command[1]))
+        sql.commit()
+        string = "User {} successfully subscribed to '{}'" \
+            .format(ctx.message.author.name, command[1])
+
+        embed = embedSuccess(title=string)
+        await bot.say(embed=embed)
+
+@bot.command(pass_context=True, name="unsub")
+async def unsubscribe(ctx):
+    command = ctx.message.content.split(' ', 1)
+
+    if len(command) < 2:
+        await showHelp()
+    else:
+        cur.execute('SELECT * FROM subscriptions WHERE id=? and userID=?',
+                    (command[1], str(ctx.message.author.id)))
+        if cur.fetchone():
+            cur.execute('DELETE FROM subscriptions WHERE id=? and userID=?',
+                        (command[1], str(ctx.message.author.id)))
+            sql.commit()
+
+            string = "{} has successfully unsubscribed from {}" \
+                .format(ctx.message.author.name, command[1])
+            embed = embedSuccess(title=string)
+            await bot.say(embed=embed)
+
+        else:
+            string = "User {} doesn't have subscription to '{}'" \
+                .format(ctx.message.author, command[1])
+            embed = embedInformation(title=string)
+            await bot.say(embed=embed)
+
+@bot.command(pass_context=True, name="unsuball")
+async def unsubscribeAll(ctx):
+    command = ctx.message.content.split()
+
+    if len(command) != 1:
+        await showHelp()
+    else:
+        cur.execute('SELECT * FROM subscriptions WHERE userID=?',
+                    (str(ctx.message.author.id),))
+        if cur.fetchone():
+            cur.execute('DELETE FROM subscriptions WHERE userID=?',
+                        (str(ctx.message.author.id),))
+            sql.commit()
+
+            string = "{} has successfully dropped all subscriptions" \
+                .format(ctx.message.author.name)
+            embed = embedSuccess(title=string)
+            await bot.say(embed=embed)
+
+        else:
+            string = "User {} doesn't have any subscriptions" \
+                .format(ctx.message.author)
+            embed = embedInformation(title=string)
+            await bot.say(embed=embed)
+
+@bot.command(pass_context=True, name="showsub")
+async def showSubscription(ctx):
+    command = ctx.message.content.split()
+
+    if len(command) != 1:
+        await showHelp()
+    else:
+        # Get number of subscriptions
+        cur.execute('SELECT count(*) FROM subscriptions WHERE userID=?',
+                    (str(ctx.message.author.id),))
+        numRecords = cur.fetchone()[0]
+
+        # Get subscriptions
+        cur.execute('SELECT id, matchPattern FROM subscriptions WHERE userID=?',
+                    (str(ctx.message.author.id),))
+
+        fieldList = list()
+        for row in cur:
+            string = "{}) {}".format(row[0], row[1])
+
+            # '\u200b' is a zero width space. This is used when we don't want
+            # a name in an embed field
+            field = EmbedField(value='\u200b', name=string, inline=False)
+            fieldList.append(field)
+
+        title = "Subscriptions for user %s" % ctx.message.author.name
+        description = "User has %d subscriptions." % numRecords
+        embed = embedInformation(title=title, fieldList=fieldList, description=description)
+        await bot.say(embed=embed)
+
+@bot.command(pass_context=True, name="help")
+async def help(ctx):
+    command = ctx.message.content.split()
+
+    if len(command) != 1:
+        await showHelp()
+    else:
+        title = "Available commands for gundeals bot"
+
+        fieldSub = EmbedField(value='Subscribe to a matchPattern to be notified of deals matching pattern',
+            name="%ssub <matchPattern>" % settings["discord"]["command_prefix"],
+            inline=False)
+        fieldUnsub = EmbedField(value='Unsubscribe from a matchPattern',
+            name="%sunsub <subId>"  % settings["discord"]["command_prefix"],
+            inline=False)
+        fieldUnsuball = EmbedField(value='Unsubscribe from all subscriptions',
+            name="%sunsuball"  % settings["discord"]["command_prefix"],
+            inline=False)
+        fieldShowsub = EmbedField(value='Show your current subscriptions in form: [subId] [matchPattern]',
+            name="%sshowsub"  % settings["discord"]["command_prefix"],
+            inline=False)
+        fieldList = list((fieldSub, fieldUnsub, fieldUnsuball, fieldShowsub))
+        embed = embedInformation(title=title, fieldList=fieldList)
+        await bot.say(embed=embed)
+
+######################################
+##### Feed Processing/Management #####
+######################################
+
+@checks.admin_or_permissions(manage_server=True)
+@bot.command(pass_context=True, name="addfeed")
+async def addFeed(ctx):
+    channelID = int(ctx.message.channel.id)
+    channelName = ctx.message.channel.name
+    cur.execute('SELECT channelID FROM feeds WHERE channelID=?',
+                (channelID,))
+    if cur.fetchone():
+        string = "Feed already exists for channel **{}**" \
+            .format(channelName)
+        embed = embedInformation(string)
+        await bot.say(embed=embed)
+    else:
+        cur.execute('INSERT INTO feeds VALUES(?)',
+                    (channelID,))
+        sql.commit()
+
+        string = "Added feed to channel **{}**" \
+              .format(channelName)
+        embed = embedSuccess(string)
+        await bot.say(embed=embed)
+
+@checks.admin_or_permissions(manage_server=True)
+@bot.command(pass_context=True, name="removefeed")
+async def removeFeed(ctx):
+    channelID = int(ctx.message.channel.id)
+    channelName = ctx.message.channel.name
+    cur.execute('SELECT channelID FROM feeds WHERE channelID=?',
+                (channelID,))
+    if cur.fetchone():
+        cur.execute('DELETE FROM feeds WHERE channelID=?',
+                    (channelID,))
+        sql.commit()
+
+        string = "Removed feed from channel **{}**" \
+              .format(channelName)
+        embed = embedSuccess(string)
+        await bot.say(embed=embed)
+
+    else:
+        string = "No feeds found for channel **{}**" \
+              .format(channelName)
+        embed = embedError(string)
+        await bot.say(embed=embed)
+
+
+async def backgroundLoop():
+    await bot.wait_until_ready()
+    while bot.is_logged_in and not bot.is_closed:
+        try:
+            newSubmissionsFound = False
+            headers = {'User-agent': '{} - {}'.format(username, version)}
+            r = requests.get(settings['feed']['json_url'],
+                            headers=headers)
+            subNew = r.json()
+            for item in subNew['data']['children']:
+                submissionID = str(item['data']['name'])
+                submissionTitle = str(item['data']['title'])
+                submissionCreatedUTC = int(item['data']['created_utc'])
+                submissionURL = 'https://www.reddit.com/' + \
+                                str(item['data']['id'])
+                thumbnailURL = (str(item['data']['thumbnail']) \
+                            if str(item['data']['thumbnail']) != 'default' \
+                            else 'https://i.imgur.com/RMbd1PC.png')
+                cur.execute('SELECT ID ' \
+                            'FROM processedSubmissions ' \
+                            'WHERE ID=?',
+                            (submissionID,))
+                if not cur.fetchone():
+                    newSubmissionsFound = True
+                    await pushToFeeds(submissionTitle,
+                                    submissionURL)
+                    await pushToSubscriptions(submissionTitle,
+                                            submissionURL,
+                                            thumbnailURL)
+                    cur.execute('INSERT INTO processedSubmissions VALUES(?,?)',
+                                (submissionID, submissionCreatedUTC))
+                    sql.commit()
+            if newSubmissionsFound == True:
+                cur.execute('DELETE FROM processedSubmissions ' \
+                            'WHERE ID NOT IN ' \
+                            '(SELECT ID ' \
+                            'FROM processedSubmissions ' \
+                            'ORDER BY createdUTC DESC LIMIT 50)')
+                sql.commit()
+                cur.execute('VACUUM')
+                newSubmissionsFound = False
+            await asyncio.sleep(0.1)
+        except Exception as e:
+            print('backgroundLoop : ', e)
+            pass
+        await asyncio.sleep(300)
+
+
+async def pushToFeeds(title, url):
+    feedItem = '**{}**\n<{}>\n-'.format(title, url)
+    cur.execute('SELECT channelID from feeds')
+    for row in cur:
+        channelID = str(row[0])
+        try:
+            channel = bot.get_channel(id=channelID)
+            await bot.send_message(channel, feedItem)
+        except discord.errors.NotFound as de:
+            print('pushToFeeds : ' \
+                  'discord.errors.NotFound ' \
+                  '(Server/Channel) : ', de)
+            pass
+        except Exception as e:
+            print('pushToFeeds : ', e)
+            pass
+    await asyncio.sleep(0.1)
+
+
+async def pushToSubscriptions(title, url, thumbnailURL):
+    cur.execute('SELECT ID, userID, matchPattern ' \
+                'FROM subscriptions')
+    for row in cur:
+        matchPattern = str(row[2]).lower().split(' ')
+        if all([word in title.lower() for word in matchPattern]):
+            subscriptionID = str(row[0])
+            userID = str(row[1])
+            try:
+                user = bot.get_user_info(userID)
+            except discord.errors.NotFound as de:
+                print('pushToSubscriptions : ' \
+                     'discord.errors.NotFound (User) : ', de)
+                pass
+            except Exception as e:
+                print('pushToSubscriptions : ', e)
+                pass
+            # field = EmbedField(name='**{}**'.format(url),
+            #     value='Reply with **{}unsub {}** ' \
+            #            'to cancel this subscription.' \
+            #            .format(settings["discord"]["command_prefix"],
+            #                    subscriptionID),
+            #     inline=False)
+            # fieldList = [field]
+            # embed = embedInformation(title='**New post found matching ' \
+            #     'your subscription "{}"!**' \
+            #     .format(matchPattern),
+            #     fieldList=fieldList,
+            #     description=title)
+            # embed.set_thumbnail(url=thumbnailURL)
+            embed = discord.Embed(
+                title='**New post found matching ' \
+                      'your subscription "{}"!**' \
+                      .format(matchPattern),
+                description=title,
+                color=0x0079D8)
+            embed.set_thumbnail(url=thumbnailURL)
+            embed.add_field(name='**{}**'.format(url),
+                value='Reply with **{}unsub {}** ' \
+                       'to cancel this subscription.' \
+                       .format(settings["discord"]["command_prefix"],
+                               subscriptionID),
+                inline=False)
+            await bot.send_message(user, embed=embed)
+    await asyncio.sleep(0.1)
+
+
+bot.loop.create_task(backgroundLoop())
 bot.run(settings["discord"]["client_token"])

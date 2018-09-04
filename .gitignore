@@ -1,2 +1,5 @@
 
 botsettings.json
+botsettings.json
+.DS_Store
+*.db
